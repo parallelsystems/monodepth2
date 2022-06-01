@@ -21,8 +21,12 @@ def pil_loader(path):
     # open path as file to avoid ResourceWarning
     # (https://github.com/python-pillow/Pillow/issues/835)
     with open(path, 'rb') as f:
-        with Image.open(f) as img:
-            return img.convert('RGB')
+        try:
+            with Image.open(f) as img:
+                return img.convert('RGB')
+        except OSError as e:
+            print(f"pil_loader failed with OSError: {e}")
+            print(f"path: {path}")
 
 
 class MonoDataset(data.Dataset):
@@ -54,7 +58,7 @@ class MonoDataset(data.Dataset):
         self.height = height
         self.width = width
         self.num_scales = num_scales
-        self.interp = Image.ANTIALIAS
+        self.interp = transforms.InterpolationMode.BILINEAR
 
         self.frame_idxs = frame_idxs
 
@@ -173,7 +177,7 @@ class MonoDataset(data.Dataset):
             inputs[("inv_K", scale)] = torch.from_numpy(inv_K)
 
         if do_color_aug:
-            color_aug = transforms.ColorJitter.get_params(
+            color_aug = transforms.ColorJitter(
                 self.brightness, self.contrast, self.saturation, self.hue)
         else:
             color_aug = (lambda x: x)

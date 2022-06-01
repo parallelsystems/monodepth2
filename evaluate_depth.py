@@ -1,7 +1,7 @@
 from __future__ import absolute_import, division, print_function
 
 import os
-import cv2
+from PIL import Image
 import numpy as np
 
 import torch
@@ -12,9 +12,6 @@ from utils import readlines
 from options import MonodepthOptions
 import datasets
 import networks
-
-cv2.setNumThreads(0)  # This speeds up evaluation 5x on our unix systems (OpenCV 3.3.1)
-
 
 splits_dir = os.path.join(os.path.dirname(__file__), "splits")
 
@@ -80,9 +77,11 @@ def evaluate(opt):
 
         encoder_dict = torch.load(encoder_path)
 
+        img_ext = '.png' if opt.png else '.jpg'
+
         dataset = datasets.KITTIRAWDataset(opt.data_path, filenames,
                                            encoder_dict['height'], encoder_dict['width'],
-                                           [0], 4, is_train=False)
+                                           [0], 4, is_train=False, img_ext=img_ext)
         dataloader = DataLoader(dataset, 16, shuffle=False, num_workers=opt.num_workers,
                                 pin_memory=True, drop_last=False)
 
@@ -152,18 +151,19 @@ def evaluate(opt):
             os.makedirs(save_dir)
 
         for idx in range(len(pred_disps)):
-            disp_resized = cv2.resize(pred_disps[idx], (1216, 352))
+            disp_resized = np.array(Image.fromarray(pred_disps[idx]).resize((1216, 352)))
             depth = STEREO_SCALE_FACTOR / disp_resized
             depth = np.clip(depth, 0, 80)
             depth = np.uint16(depth * 256)
             save_path = os.path.join(save_dir, "{:010d}.png".format(idx))
-            cv2.imwrite(save_path, depth)
+            Image.fromarray(depth).save(save_path)
+
 
         print("-> No ground truth is available for the KITTI benchmark, so not evaluating. Done.")
         quit()
 
     gt_path = os.path.join(splits_dir, opt.eval_split, "gt_depths.npz")
-    gt_depths = np.load(gt_path, fix_imports=True, encoding='latin1')["data"]
+    gt_depths = np.load(gt_path, fix_imports=True, encoding='latin1', allow_pickle=True)["data"]
 
     print("-> Evaluating")
 
@@ -184,7 +184,7 @@ def evaluate(opt):
         gt_height, gt_width = gt_depth.shape[:2]
 
         pred_disp = pred_disps[i]
-        pred_disp = cv2.resize(pred_disp, (gt_width, gt_height))
+        pred_disp = np.array(Image.fromarray(pred_disp).resize((gt_width, gt_height)))
         pred_depth = 1 / pred_disp
 
         if opt.eval_split == "eigen":
