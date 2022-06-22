@@ -8,8 +8,66 @@ from __future__ import absolute_import, division, print_function
 
 import torch
 import torch.nn as nn
+import torchvision.models as models
 from collections import OrderedDict
 
+class NChannelResNet(models.ResNet):
+    """Wrapper around torchvision.models.ResNet for arbitrary numbers of input channels"""
+
+    def __init__(self, block_type, layers, num_input_channels):
+        super().__init__(block_type, layers)
+        self.num_enc_channels = [64, 64, 128, 256, 512]
+        self.inplanes = 64
+        self.conv1 = nn.Conv2d(
+            num_input_channels, 64, kernel_size=7, stride=2, padding=3, bias=False
+        )
+
+
+
+class PoseNet(NChannelResNet):
+    """Wraps around NChannelResNet to do full end-to-end pose extraction
+
+    Produces poses as pairs of axis-angle and translation vectors. The axis-angle vector can be interpreted
+    as a rotation transformation in the following way:
+    - interpret the unit vector pointing in the direction as the axis-angle vector as axis of rotation
+    - interpret the magnitude of the axis-angle vector as the angle to rotate
+    """
+
+    def __init__(self, block_type, layers, num_input_channels, num_predictions=2):
+        super().__init__(block_type, layers, num_input_channels)
+        self.num_predictions = num_predictions
+
+        self.squeeze = nn.Conv2d(self.num_enc_channels[-1], 256, 1)
+        self.pose0 = nn.Conv2d(256, 256, 3, 1, 1)
+        self.pose1 = nn.Conv2d(256, 256, 3, 1, 1)
+        self.pose2 = nn.Conv2d(256, 6 * self.num_predictions, 1)
+
+    def forward(self, x):
+        # ResNet feature extractor bits
+        x = self.conv1(x[0])
+        x = self.bn1(x)
+        x = self.relu(x)
+        x = self.maxpool(x)
+        x = self.layer1(x)
+        x = self.layer2(x)
+        x = self.layer3(x)
+        x = self.layer4(x)
+        # pose-specific things
+        x = self.squeeze(x)
+        x = self.relu(x)
+        x = self.pose0(x)
+        x = self.relu(x)
+        x = self.pose1(x)
+        x = self.relu(x)
+        x = self.pose2(x)
+
+        x = x.mean(3).mean(2)
+        x = 0.01 * x.view(-1, self.num_predictions, 1, 6)
+
+        axisangle = x[..., :3]
+        translation = x[..., 3:]
+
+        return axisangle, translation
 
 class PoseDecoder(nn.Module):
     def __init__(self, num_ch_enc, num_input_features, num_frames_to_predict_for=None, stride=1):

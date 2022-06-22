@@ -11,6 +11,7 @@ import time
 
 import torch
 import torch.nn.functional as F
+import torchvision.models as models
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
@@ -61,6 +62,7 @@ class Trainer:
         self.parameters_to_train += list(self.models["depth"].parameters())
         if self.use_pose_net:
             if self.opt.pose_model_type == "separate_resnet":
+                """
                 self.models["pose_encoder"] = networks.ResnetEncoder(
                     self.opt.num_layers,
                     self.opt.weights_init == "pretrained",
@@ -73,6 +75,13 @@ class Trainer:
                     self.models["pose_encoder"].num_ch_enc,
                     num_input_features=1,
                     num_frames_to_predict_for=2)
+                """
+
+                self.models["pose"] = networks.PoseNet(
+                    block_type=models.resnet.BasicBlock,
+                    layers=[2, 2, 2, 2],
+                    num_input_channels=6
+                )
 
             elif self.opt.pose_model_type == "shared":
                 self.models["pose"] = networks.PoseDecoder(
@@ -286,7 +295,7 @@ class Trainer:
                         pose_inputs = [pose_feats[0], pose_feats[f_i]]
 
                     if self.opt.pose_model_type == "separate_resnet":
-                        pose_inputs = [self.models["pose_encoder"](torch.cat(pose_inputs, 1))]
+                        pose_inputs = [(torch.cat(pose_inputs, 1))]
                     elif self.opt.pose_model_type == "posecnn":
                         pose_inputs = torch.cat(pose_inputs, 1)
 
