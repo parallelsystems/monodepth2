@@ -9,6 +9,7 @@ from __future__ import absolute_import, division, print_function
 import numpy as np
 import torch
 import torch.nn as nn
+import torchvision.models as models
 
 from collections import OrderedDict
 from layers import *
@@ -63,3 +64,100 @@ class DepthDecoder(nn.Module):
                 self.outputs[("disp", i)] = self.sigmoid(self.convs[("dispconv", i)](x))
 
         return self.outputs
+
+class PaddedConv(nn.Module):
+    def __init__(self, in_channels, out_channels):
+        super().__init__()
+        self.pad = nn.ReflectionPad2d(1)
+        self.conv = nn.Conv2d(in_channels, out_channels, 3)
+
+    def forward(self, x):
+        return self.conv(self.pad(x))
+
+
+class UpsampleSkipConv(nn.Module):
+    def __init__(self, in_channels, intermediate_channels, skip_channels, out_channels):
+        super().__init__()
+        self.padconv0 = PaddedConv(in_channels, intermediate_channels)
+        self.padconv1 = PaddedConv(intermediate_channels + skip_channels, out_channels)
+        self.upsample = lambda x: F.interpolate(x, scale_factor=2, mode="nearest")
+        self.elu = nn.ELU(inplace=True)
+        self.pad = nn.ReflectionPad2d(1)
+
+    def forward(self, x, skip=None):
+        # upsample lower resolution tensor to skip resolution
+        x = self.padconv0(x)
+        x = self.elu(x)
+        x = [self.upsample(x)]
+
+        # concatenate skip features
+        if skip is not None:
+            x += [skip]
+        x = torch.cat(x, 1)
+
+        # apply more convolutions
+        x = self.padconv1(x)
+        x = self.elu(x)
+
+        return x
+
+
+class DepthNet(models.ResNet):
+    """U-Net style autoencoder based on ResNet"""
+
+    def __init__(self, block_type, layers):
+        super().__init__(block_type, layers)
+        # encoder layers inherited
+        self.num_enc_channels = [64, 64, 128, 256, 512]
+        self.num_dec_channels = [16, 32, 64, 128, 256]
+
+        # decoder stuff
+        self.decoder = OrderedDict()
+        for layer in range(4, -1, -1):
+            in_channels = (
+                self.num_enc_channels[-1]
+                if layer == 4
+                else self.num_dec_channels[layer + 1]
+            )
+            intermediate_channels = self.num_dec_channels[layer]
+            skip_channels = self.num_enc_channels[layer - 1] if layer > 0 else 0
+            out_channels = self.num_dec_channels[layer]
+            self.decoder[f"conv{layer}"] = UpsampleSkipConv(
+                in_channels,
+                intermediate_channels,
+                skip_channels,
+                out_channels,
+            )
+
+            if layer != 4:
+                # for actually predicting disparity
+                self.decoder[f"disparity_conv{layer}"] = PaddedConv(
+                    self.num_dec_channels[layer], 1
+                )
+
+        self.decoder_layers = nn.ModuleList(list(self.decoder.values()))
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x):
+        # encoder
+        feats = []
+        x = self.conv1(x)
+        x = self.bn1(x)
+        feats.append(self.relu(x))
+        feats.append(self.layer1(self.maxpool(feats[-1])))
+        feats.append(self.layer2(feats[-1]))
+        feats.append(self.layer3(feats[-1]))
+        feats.append(self.layer4(feats[-1]))
+
+        # decoder
+        outputs = {}
+        x = feats[-1]
+        for layer in range(4, -1, -1):
+            skip = feats[layer - 1] if layer > 0 else None
+            x = self.decoder[f"conv{layer}"](x, skip)
+
+            if layer != 4:
+                outputs[("disp", layer)] = self.sigmoid(
+                    self.decoder[f"disparity_conv{layer}"](x)
+                )
+        return outputs
