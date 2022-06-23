@@ -21,6 +21,7 @@ import json
 from utils import *
 from kitti_utils import *
 from layers import *
+from losses import JackLoss
 
 import datasets
 import networks
@@ -112,6 +113,8 @@ class Trainer:
             self.models["predictive_mask"].to(self.device)
             self.parameters_to_train += list(self.models["predictive_mask"].parameters())
 
+
+        self.jack_loss = JackLoss()
         self.model_optimizer = optim.Adam(self.parameters_to_train, self.opt.learning_rate)
         self.model_lr_scheduler = optim.lr_scheduler.StepLR(
             self.model_optimizer, self.opt.scheduler_step_size, 0.1)
@@ -425,6 +428,11 @@ class Trainer:
         return reprojection_loss
 
     def compute_losses(self, inputs, outputs):
+        losses = {}
+        losses["loss"] = self.jack_loss(inputs, outputs)
+        return losses
+
+    def compute_losses_(self, inputs, outputs):
         """Compute the reprojection and smoothness losses for a minibatch
         """
         losses = {}
@@ -505,6 +513,9 @@ class Trainer:
 
             mean_disp = disp.mean(2, True).mean(3, True)
             norm_disp = disp / (mean_disp + 1e-7)
+            print("scale", scale)
+            print("\tnorm_disp.shape", norm_disp.shape)
+            print("\tcolor.shape", color.shape)
             smooth_loss = get_smooth_loss(norm_disp, color)
 
             loss += self.opt.disparity_smoothness * smooth_loss / (2 ** scale)
