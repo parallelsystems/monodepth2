@@ -17,13 +17,13 @@ class OxnardDataset(MonoDataset):
         super().__init__(*args, **kwargs)
 
         self.K = np.array([
-            [1.44783388, 0.        , 0.4426172 , 0.],
-            [0.        , 2.27537375, 0.49484771, 0.],
+            [0.49208605, 0.        , 0.49647748, 0.],
+            [0.        , 0.76157062, 0.50610668, 0.],
             [0.        , 0.        , 1.        , 0.],
             [0.        , 0.        , 0.        , 1.],
         ], dtype=np.float32)
 
-        self.full_res_shape = (416, 288)
+        self.full_res_shape = (608, 416)
         
         split = "train" if self.is_train else "val"
         self.root_dir = os.path.join(self.data_path, split)

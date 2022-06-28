@@ -1,0 +1,3 @@
+#/bin/sh
+
+python train.py --model_name mono_model --data_path=/media/nas/scratch/perception/data/datasets/kitti --png
