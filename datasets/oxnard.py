@@ -17,10 +17,10 @@ class OxnardDataset(MonoDataset):
         super().__init__(*args, **kwargs)
 
         self.K = np.array([
-            [0.49208605, 0.        , 0.49647748, 0.],
-            [0.        , 0.76157062, 0.50610668, 0.],
+            [1.44783388, 0.        , 0.4426172 , 0.],
+            [0.        , 2.27537375, 0.49484771, 0.],
             [0.        , 0.        , 1.        , 0.],
-            [0.        , 0.        , 0.        , 1.],
+            [0.        , 0.        , 0.        , 0.]
         ], dtype=np.float32)
 
         self.full_res_shape = (608, 416)
@@ -33,9 +33,6 @@ class OxnardDataset(MonoDataset):
 
     def get_color(self, folder, frame_index, do_flip):
         color = self.loader(os.path.join(folder, f"{frame_index}{self.img_ext}"))
-
-        # memory saving hack
-        color = color.resize(self.full_res_shape)
 
         if do_flip:
             color = color.transpose(pil.FLIP_LEFT_RIGHT)
