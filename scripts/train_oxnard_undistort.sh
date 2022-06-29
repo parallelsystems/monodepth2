@@ -1,8 +1,8 @@
 
-CUDA_VISIBLE_DEVICES=0 python train.py \
-    --model_name mono_model_undistort2 \
+CUDA_VISIBLE_DEVICES=1 python train.py \
+    --model_name undistorted \
     --dataset oxnard \
-    --data_path=./data/datasets/triplets_daytime_undistorted2 \
+    --data_path=./data/datasets/triplets_daytime_undistorted \
     --height 416 \
     --width 608 \
     --batch_size 4 \

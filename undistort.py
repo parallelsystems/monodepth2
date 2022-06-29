@@ -15,8 +15,8 @@ def get_intrinsics():
     K = intrinsics["K"].copy()
     K[0, :] /= w
     K[1, :] /= h
-    K[0, 2] = 0.5
-    K[1, 2] = 0.5
+    # K[0, 2] = 0.5
+    # K[1, 2] = 0.5
 
     intrinsics["K"] = K
     return intrinsics
@@ -27,11 +27,9 @@ def main():
     K[0, :] *= 608
     K[1, :] *= 416
     D = intrinsics["D"]
-    print(K)
-    print(D)
 
     root_dir = "./data/datasets/triplets_daytime_distorted"
-    output_dir = "./data/datasets/triplets_daytime_undistorted2"
+    output_dir = "./data/datasets/triplets_daytime_undistorted"
 
     meta = read_file(os.path.join(root_dir, "train/meta.json"))
     save_file(meta, os.path.join(output_dir, "train/meta.json"))
